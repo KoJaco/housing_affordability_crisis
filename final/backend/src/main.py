@@ -1,8 +1,11 @@
 """FastAPI application for Sydney Housing Data API."""
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
 
 from .api.routes import properties, analytics, quarterly
+from .config import PROJECT_ROOT
 
 # Create FastAPI app
 app = FastAPI(
@@ -10,6 +13,11 @@ app = FastAPI(
     description="API for querying Sydney property sales data.",
     version="1.0.0"
 )
+
+# Mount static files directory
+static_dir = PROJECT_ROOT / "static"
+if static_dir.exists():
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 # Add CORS middleware
 app.add_middleware(

@@ -55,6 +55,7 @@ class QuarterlyStatsBase(BaseModel):
     quarter_start: date
     num_sales: int
     median_price: Optional[float] = None
+    median_price_smoothed: Optional[float] = None
     mean_price: Optional[float] = None
     min_price: Optional[float] = None
     max_price: Optional[float] = None
@@ -94,6 +95,7 @@ class AnalyticsBase(BaseModel):
     suburb: str
     property_type: str = Field(..., pattern="^(house|unit)$")
     current_median_price: Optional[float] = None
+    current_median_price_smoothed: Optional[float] = None
     current_avg_ctsd: Optional[float] = None
     current_num_sales: Optional[int] = None
 
@@ -109,6 +111,13 @@ class Analytics(AnalyticsBase):
     growth_since_2005_percentage: Optional[float] = None
     cagr_5yr: Optional[float] = None
     cagr_10yr: Optional[float] = None
+    growth_1yr_percentage_smoothed: Optional[float] = None
+    growth_3yr_percentage_smoothed: Optional[float] = None
+    growth_5yr_percentage_smoothed: Optional[float] = None
+    growth_10yr_percentage_smoothed: Optional[float] = None
+    growth_since_2005_percentage_smoothed: Optional[float] = None
+    cagr_5yr_smoothed: Optional[float] = None
+    cagr_10yr_smoothed: Optional[float] = None
     volatility_score: Optional[float] = None
     max_drawdown_pct: Optional[float] = None
     recovery_quarters: Optional[int] = None

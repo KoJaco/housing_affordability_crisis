@@ -7,15 +7,15 @@ import type {
     QuarterlyStats,
     SuburbSummary,
     AnalyticsListResponse,
-    QuarterlyStatsListResponse,
     SuburbSearchResponse,
     PropertyType,
     AggregatedSuburbAnalytics,
     SuburbData,
     BulkSuburbsData,
 } from "~/types";
+import { API_PAGE_LIMIT } from "./constants";
 
-const API_BASE_URL = "http://localhost:8000";
+const API_BASE_URL = process.env.API_BASE_URL || "http://localhost:8000";
 
 /**
  * Fetch suburb analytics list
@@ -193,125 +193,74 @@ function aggregateAnalytics(
         return houseVal * houseWeight + unitVal * unitWeight;
     };
 
-    return {
+    // Fields to aggregate using weighted average
+    const fieldsToAggregate: Array<keyof SuburbAnalytics> = [
+        "current_median_price",
+        "current_median_price_smoothed",
+        "current_avg_ctsd",
+        "growth_1yr_percentage",
+        "growth_3yr_percentage",
+        "growth_5yr_percentage",
+        "growth_10yr_percentage",
+        "growth_since_2005_percentage",
+        "cagr_5yr",
+        "cagr_10yr",
+        "growth_1yr_percentage_smoothed",
+        "growth_3yr_percentage_smoothed",
+        "growth_5yr_percentage_smoothed",
+        "growth_10yr_percentage_smoothed",
+        "growth_since_2005_percentage_smoothed",
+        "cagr_5yr_smoothed",
+        "cagr_10yr_smoothed",
+        "volatility_score",
+        "max_drawdown_pct",
+        "recovery_quarters",
+        "avg_quarterly_volume",
+        "overall_liquidity_score",
+        "market_health_score",
+        "q1_avg_premium_percentage",
+        "q2_avg_premium_percentage",
+        "q3_avg_premium_percentage",
+        "q4_avg_premium_percentage",
+        "forecast_q1_price",
+        "forecast_q1_lower",
+        "forecast_q1_upper",
+        "forecast_q2_price",
+        "forecast_q2_lower",
+        "forecast_q2_upper",
+        "price_rank",
+        "growth_rank",
+        "speed_rank",
+        "total_quarters_with_data",
+        "data_completeness_percentage",
+    ];
+
+    // Build aggregated object
+    const aggregated: AggregatedSuburbAnalytics = {
         suburb: house.suburb,
         property_type: "all",
         last_updated: house.last_updated || unit.last_updated,
         current_quarter: house.current_quarter || unit.current_quarter,
-        current_median_price: aggregate(
-            house.current_median_price,
-            unit.current_median_price
-        ),
-        current_avg_ctsd: aggregate(
-            house.current_avg_ctsd,
-            unit.current_avg_ctsd
-        ),
         current_num_sales:
             (house.current_num_sales || 0) + (unit.current_num_sales || 0),
-        growth_1yr_percentage: aggregate(
-            house.growth_1yr_percentage,
-            unit.growth_1yr_percentage
-        ),
-        growth_3yr_percentage: aggregate(
-            house.growth_3yr_percentage,
-            unit.growth_3yr_percentage
-        ),
-        growth_5yr_percentage: aggregate(
-            house.growth_5yr_percentage,
-            unit.growth_5yr_percentage
-        ),
-        growth_10yr_percentage: aggregate(
-            house.growth_10yr_percentage,
-            unit.growth_10yr_percentage
-        ),
-        growth_since_2005_percentage: aggregate(
-            house.growth_since_2005_percentage,
-            unit.growth_since_2005_percentage
-        ),
-        cagr_5yr: aggregate(house.cagr_5yr, unit.cagr_5yr),
-        cagr_10yr: aggregate(house.cagr_10yr, unit.cagr_10yr),
-        volatility_score: aggregate(
-            house.volatility_score,
-            unit.volatility_score
-        ),
-        max_drawdown_pct: aggregate(
-            house.max_drawdown_pct,
-            unit.max_drawdown_pct
-        ),
-        recovery_quarters: aggregate(
-            house.recovery_quarters,
-            unit.recovery_quarters
-        ),
-        avg_quarterly_volume: aggregate(
-            house.avg_quarterly_volume,
-            unit.avg_quarterly_volume
-        ),
-        overall_liquidity_score: aggregate(
-            house.overall_liquidity_score,
-            unit.overall_liquidity_score
-        ),
-        market_health_score: aggregate(
-            house.market_health_score,
-            unit.market_health_score
-        ),
-        q1_avg_premium_percentage: aggregate(
-            house.q1_avg_premium_percentage,
-            unit.q1_avg_premium_percentage
-        ),
-        q2_avg_premium_percentage: aggregate(
-            house.q2_avg_premium_percentage,
-            unit.q2_avg_premium_percentage
-        ),
-        q3_avg_premium_percentage: aggregate(
-            house.q3_avg_premium_percentage,
-            unit.q3_avg_premium_percentage
-        ),
-        q4_avg_premium_percentage: aggregate(
-            house.q4_avg_premium_percentage,
-            unit.q4_avg_premium_percentage
-        ),
         best_quarter_to_sell:
             house.best_quarter_to_sell || unit.best_quarter_to_sell,
-        forecast_q1_price: aggregate(
-            house.forecast_q1_price,
-            unit.forecast_q1_price
-        ),
-        forecast_q1_lower: aggregate(
-            house.forecast_q1_lower,
-            unit.forecast_q1_lower
-        ),
-        forecast_q1_upper: aggregate(
-            house.forecast_q1_upper,
-            unit.forecast_q1_upper
-        ),
-        forecast_q2_price: aggregate(
-            house.forecast_q2_price,
-            unit.forecast_q2_price
-        ),
-        forecast_q2_lower: aggregate(
-            house.forecast_q2_lower,
-            unit.forecast_q2_lower
-        ),
-        forecast_q2_upper: aggregate(
-            house.forecast_q2_upper,
-            unit.forecast_q2_upper
-        ),
-        price_rank: aggregate(house.price_rank, unit.price_rank),
-        growth_rank: aggregate(house.growth_rank, unit.growth_rank),
-        speed_rank: aggregate(house.speed_rank, unit.speed_rank),
-        total_quarters_with_data: aggregate(
-            house.total_quarters_with_data,
-            unit.total_quarters_with_data
-        ),
-        data_completeness_percentage: aggregate(
-            house.data_completeness_percentage,
-            unit.data_completeness_percentage
-        ),
         price_quarterly: null, // Would need to merge JSON strings
         ctsd_quarterly: null, // Would need to merge JSON strings
         house_analytics: house,
         unit_analytics: unit,
-    };
+    } as AggregatedSuburbAnalytics;
+
+    // Aggregate all numeric fields
+    fieldsToAggregate.forEach((field) => {
+        (aggregated as unknown as Record<string, number | null>)[field] =
+            aggregate(
+                house[field] as number | null,
+                unit[field] as number | null
+            );
+    });
+
+    return aggregated;
 }
 
 /**
@@ -406,7 +355,40 @@ export async function fetchBulkSuburbsData(
  */
 export async function fetchSuburbSummaries(): Promise<SuburbSummary[]> {
     // Fetch all analytics (both house and unit)
-    const response = await fetchAnalytics({ limit: 1000 });
+    // Note: We need to fetch all records via pagination because there are 1157+ records
+    // (645 suburbs × 2 property types), and the API limit is 1000 per request.
+    // VAUCLUSE is at position 1057, so it gets cut off with limit 1000.
+    const allItems: SuburbAnalytics[] = [];
+    let offset = 0;
+    const limit = API_PAGE_LIMIT;
+    let totalRecords = 0;
+
+    // Fetch all records via pagination
+    while (true) {
+        const response = await fetchAnalytics({ limit, offset });
+        allItems.push(...response.items);
+
+        // Track total records from API response
+        totalRecords = response.total;
+
+        // Stop if we've fetched all records
+        // Condition 1: Got fewer items than requested (last page)
+        // Condition 2: Already fetched all records (safety check)
+        if (response.items.length < limit || allItems.length >= totalRecords) {
+            break;
+        }
+
+        // Move to next page
+        offset += limit;
+    }
+
+    // Log for debugging (can be removed in production)
+    if (allItems.length < totalRecords) {
+        console.warn(
+            `Warning: Fetched ${allItems.length} items but API reports ${totalRecords} total. ` +
+                `Some suburbs may be missing from the map.`
+        );
+    }
 
     // Group by suburb and aggregate
     const suburbMap = new Map<
@@ -414,7 +396,7 @@ export async function fetchSuburbSummaries(): Promise<SuburbSummary[]> {
         { prices: number[]; growths: number[]; ctss: number[] }
     >();
 
-    for (const item of response.items) {
+    for (const item of allItems) {
         if (!suburbMap.has(item.suburb)) {
             suburbMap.set(item.suburb, { prices: [], growths: [], ctss: [] });
         }

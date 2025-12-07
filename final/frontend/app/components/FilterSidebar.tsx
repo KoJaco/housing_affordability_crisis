@@ -1,12 +1,28 @@
-import { useState, useMemo, useEffect, useRef } from "react";
-import { Input } from "~/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
 import { Label } from "~/components/ui/label";
 import { Slider } from "~/components/ui/slider";
 import { Button } from "~/components/ui/button";
-import { Search, X } from "lucide-react";
-import type { PropertyType } from "~/types";
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from "~/components/ui/popover";
+import {
+    Command,
+    CommandInput,
+    CommandList,
+    CommandEmpty,
+    CommandGroup,
+    CommandItem,
+} from "~/components/ui/command";
+import { Search, X, Check, Link, RotateCcwIcon } from "lucide-react";
+import { formatPrice } from "~/lib/formatters";
 import { cn } from "~/lib/utils";
+import { useChartSettingsStore } from "~/lib/chartSettingsStore";
+import { MAX_PRICE_RANGE, MAX_SELECTED_SUBURBS } from "~/lib/constants";
+import { useFilterSidebar } from "~/hooks/useFilterSidebar";
+import type { PropertyType } from "~/types";
+import { Badge } from "./ui/badge";
 
 interface FilterSidebarProps {
     searchTerm: string;
@@ -20,6 +36,9 @@ interface FilterSidebarProps {
     searchResults: string[];
     onSelectSuburb: (suburb: string) => void;
     propertyCounts: { all: number; house: number; unit: number } | null;
+    selectedSuburbs: string[];
+    onRemoveSuburb: (suburb: string) => void;
+    onClearAll: () => void;
 }
 
 export function FilterSidebar({
@@ -30,179 +49,261 @@ export function FilterSidebar({
     priceRange,
     onPriceRangeChange,
     onReset,
-    allSuburbs,
     searchResults,
     onSelectSuburb,
     propertyCounts,
+    selectedSuburbs,
+    onRemoveSuburb,
+    onClearAll,
 }: FilterSidebarProps) {
-    const [isSearchFocused, setIsSearchFocused] = useState(false);
-    const [localPriceRange, setLocalPriceRange] =
-        useState<[number, number]>(priceRange);
-    const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
-    const lastSentRangeRef = useRef<[number, number]>(priceRange);
+    // Chart sync settings
+    const syncEnabled = useChartSettingsStore((state) => state.syncEnabled);
+    const setSyncEnabled = useChartSettingsStore(
+        (state) => state.setSyncEnabled
+    );
 
-    // Sync local state with prop when prop changes externally (e.g., reset)
-    // Only sync if the prop value is different from what we last sent
-    useEffect(() => {
-        const propChanged =
-            priceRange[0] !== lastSentRangeRef.current[0] ||
-            priceRange[1] !== lastSentRangeRef.current[1];
-
-        if (propChanged) {
-            setLocalPriceRange(priceRange);
-            lastSentRangeRef.current = priceRange;
-        }
-    }, [priceRange]);
-
-    // Debounce price range updates to parent
-    useEffect(() => {
-        // Skip if local range matches what we last sent
-        if (
-            localPriceRange[0] === lastSentRangeRef.current[0] &&
-            localPriceRange[1] === lastSentRangeRef.current[1]
-        ) {
-            return;
-        }
-
-        if (debounceTimerRef.current) {
-            clearTimeout(debounceTimerRef.current);
-        }
-
-        debounceTimerRef.current = setTimeout(() => {
-            lastSentRangeRef.current = [...localPriceRange] as [number, number];
-            onPriceRangeChange([...localPriceRange]);
-        }, 150); // 150ms debounce
-
-        return () => {
-            if (debounceTimerRef.current) {
-                clearTimeout(debounceTimerRef.current);
-            }
-        };
-    }, [localPriceRange, onPriceRangeChange]);
-
-    const formatPrice = (price: number): string => {
-        if (price >= 1000000) {
-            return `$${(price / 1000000).toFixed(1)}M`;
-        }
-        return `$${(price / 1000).toFixed(0)}K`;
-    };
+    // Use custom hook for sidebar state management
+    const {
+        isPopoverOpen,
+        setIsPopoverOpen,
+        localPriceRange,
+        setLocalPriceRange,
+        displayedResults,
+        displayCount,
+        hasMore,
+        handleScroll,
+    } = useFilterSidebar({
+        searchTerm,
+        searchResults,
+        priceRange,
+        onPriceRangeChange,
+    });
 
     return (
-        <aside className="w-80 border-r bg-white p-4">
-            <div className="space-y-6">
-                {/* Search */}
-                <div className="relative space-y-2">
-                    <Label htmlFor="search">Search Suburbs</Label>
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input
-                            id="search"
-                            type="text"
-                            placeholder="Type suburb name..."
-                            value={searchTerm}
-                            onChange={(e) => onSearchChange(e.target.value)}
-                            onFocus={() => setIsSearchFocused(true)}
-                            onBlur={() =>
-                                setTimeout(() => setIsSearchFocused(false), 200)
-                            }
-                            className="pl-9 pr-9"
-                        />
-                        {searchTerm && (
-                            <button
-                                onClick={() => onSearchChange("")}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                                aria-label="Clear search"
+        <aside className="sticky top-10 h-screen w-full lg:w-80 overflow-y-auto px-2 lg:px-4 text-foreground/75">
+            <div className="md:space-y-8 space-y-6">
+                {/* Search Filter */}
+                <div className="space-y-2">
+                    <Label
+                        htmlFor="search"
+                        className="text-sm font-semibold text-foreground"
+                    >
+                        Search Suburbs
+                    </Label>
+                    <Popover
+                        open={isPopoverOpen}
+                        onOpenChange={setIsPopoverOpen}
+                    >
+                        <PopoverTrigger asChild>
+                            <Button
+                                variant="outline"
+                                role="combobox"
+                                aria-expanded={isPopoverOpen}
+                                className="w-full justify-between font-normal"
                             >
-                                <X className="h-4 w-4" />
-                            </button>
-                        )}
-                    </div>
-                    {isSearchFocused && searchResults.length > 0 && (
-                        <div className="absolute z-50 mt-1 w-full max-h-60 overflow-auto rounded-md border bg-white shadow-lg">
-                            {searchResults.map((suburb) => (
-                                <button
-                                    key={suburb}
-                                    onClick={() => {
-                                        onSelectSuburb(suburb);
-                                        onSearchChange("");
-                                        setIsSearchFocused(false);
+                                <div className="flex items-center gap-2 flex-1 min-w-0">
+                                    <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+                                    <span className="truncate">
+                                        {searchTerm || "Type suburb name..."}
+                                    </span>
+                                </div>
+                                {searchTerm && (
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            onSearchChange("");
+                                        }}
+                                        className="ml-2 shrink-0 text-muted-foreground hover:text-foreground"
+                                        aria-label="Clear search"
+                                    >
+                                        <X className="h-4 w-4" />
+                                    </button>
+                                )}
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent
+                            className="w-[var(--radix-popover-trigger-width)] p-0"
+                            align="start"
+                        >
+                            <Command shouldFilter={false}>
+                                <CommandInput
+                                    placeholder="Search suburbs..."
+                                    value={searchTerm}
+                                    onValueChange={(value) => {
+                                        onSearchChange(value);
+                                        setIsPopoverOpen(true);
                                     }}
-                                    className="w-full px-4 py-2 text-left hover:bg-gray-100"
+                                />
+                                <CommandList
+                                    onScroll={handleScroll}
+                                    className="max-h-[300px]"
                                 >
-                                    {suburb}
-                                </button>
-                            ))}
-                        </div>
-                    )}
+                                    <CommandEmpty>
+                                        {searchTerm
+                                            ? "No suburbs found."
+                                            : "Start typing to search..."}
+                                    </CommandEmpty>
+                                    {displayedResults.length > 0 && (
+                                        <CommandGroup>
+                                            {displayedResults.map((suburb) => {
+                                                const isSelected =
+                                                    selectedSuburbs.includes(
+                                                        suburb
+                                                    );
+                                                return (
+                                                    <CommandItem
+                                                        key={suburb}
+                                                        value={suburb}
+                                                        onSelect={() => {
+                                                            if (!isSelected) {
+                                                                onSelectSuburb(
+                                                                    suburb
+                                                                );
+                                                            }
+                                                            onSearchChange("");
+                                                            setIsPopoverOpen(
+                                                                false
+                                                            );
+                                                        }}
+                                                        className="cursor-pointer"
+                                                    >
+                                                        <Check
+                                                            className={cn(
+                                                                "mr-2 h-4 w-4",
+                                                                isSelected
+                                                                    ? "opacity-100"
+                                                                    : "opacity-0"
+                                                            )}
+                                                        />
+                                                        <span>{suburb}</span>
+                                                    </CommandItem>
+                                                );
+                                            })}
+                                            {hasMore && (
+                                                <div className="px-2 py-1.5 text-xs text-muted-foreground text-center">
+                                                    Scroll for more results (
+                                                    {searchResults.length -
+                                                        displayCount}{" "}
+                                                    remaining)
+                                                </div>
+                                            )}
+                                        </CommandGroup>
+                                    )}
+                                </CommandList>
+                            </Command>
+                        </PopoverContent>
+                    </Popover>
                 </div>
 
-                {/* Property Type */}
+                {selectedSuburbs.length > 0 && (
+                    <div className="flex flex-1 flex-wrap items-center gap-2 w-full">
+                        <div className="flex flex-col gap-2 w-full min-w-0">
+                            <div className="flex items-center justify-between gap-2">
+                                <h3 className="text-sm font-semibold text-foreground shrink-0">
+                                    Selected Suburbs
+                                </h3>
+                                <span className="text-xs lg:text-sm text-foreground/50 whitespace-nowrap">
+                                    ({selectedSuburbs.length}/
+                                    {MAX_SELECTED_SUBURBS} selected)
+                                </span>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                {selectedSuburbs.map((suburb) => (
+                                    <Badge
+                                        key={suburb}
+                                        variant="default"
+                                        className="flex items-center gap-1 px-2 lg:px-3 py-1.5 max-w-full"
+                                    >
+                                        <span className="truncate max-w-[200px] lg:max-w-none">
+                                            {suburb}
+                                        </span>
+                                        <Button
+                                            onClick={() =>
+                                                onRemoveSuburb(suburb)
+                                            }
+                                            size="icon"
+                                            variant="ghost"
+                                            className="ml-1 rounded-full hover:bg-gray-300 p-0 w-4 h-4 cursor-pointer shrink-0"
+                                            aria-label={`Remove ${suburb}`}
+                                        >
+                                            <X className="h-3 w-3" />
+                                        </Button>
+                                    </Badge>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Property Type Filter */}
                 <div className="space-y-3">
-                    <Label>Property Type</Label>
+                    <Label className="text-sm font-semibold text-foreground">
+                        Property Type
+                    </Label>
                     <RadioGroup
                         value={propertyType}
                         onValueChange={(value) =>
                             onPropertyTypeChange(value as PropertyType)
                         }
                     >
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-2">
-                                <RadioGroupItem value="all" id="all" />
-                                <Label
-                                    htmlFor="all"
-                                    className="cursor-pointer font-normal"
-                                >
-                                    All Properties
-                                </Label>
+                        {[
+                            {
+                                value: "all",
+                                id: "all",
+                                label: "All Properties",
+                                countKey: "all" as const,
+                            },
+                            {
+                                value: "house",
+                                id: "house",
+                                label: "Houses",
+                                countKey: "house" as const,
+                            },
+                            {
+                                value: "unit",
+                                id: "unit",
+                                label: "Apartments",
+                                countKey: "unit" as const,
+                            },
+                        ].map((type) => (
+                            <div
+                                key={type.value}
+                                className="flex items-center justify-between gap-2"
+                            >
+                                <div className="flex items-center space-x-2 min-w-0">
+                                    <RadioGroupItem
+                                        value={type.value}
+                                        id={type.id}
+                                        className="shrink-0"
+                                    />
+                                    <Label
+                                        htmlFor={type.id}
+                                        className="cursor-pointer font-normal truncate"
+                                    >
+                                        {type.label}
+                                    </Label>
+                                </div>
+                                {propertyCounts && (
+                                    <span className="text-xs lg:text-sm text-muted-foreground whitespace-nowrap shrink-0">
+                                        {propertyCounts[
+                                            type.countKey
+                                        ].toLocaleString()}
+                                    </span>
+                                )}
                             </div>
-                            {propertyCounts && (
-                                <span className="text-sm text-muted-foreground">
-                                    {propertyCounts.all.toLocaleString()}
-                                </span>
-                            )}
-                        </div>
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-2">
-                                <RadioGroupItem value="house" id="house" />
-                                <Label
-                                    htmlFor="house"
-                                    className="cursor-pointer font-normal"
-                                >
-                                    Houses
-                                </Label>
-                            </div>
-                            {propertyCounts && (
-                                <span className="text-sm text-muted-foreground">
-                                    {propertyCounts.house.toLocaleString()}
-                                </span>
-                            )}
-                        </div>
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-2">
-                                <RadioGroupItem value="unit" id="unit" />
-                                <Label
-                                    htmlFor="unit"
-                                    className="cursor-pointer font-normal"
-                                >
-                                    Apartments
-                                </Label>
-                            </div>
-                            {propertyCounts && (
-                                <span className="text-sm text-muted-foreground">
-                                    {propertyCounts.unit.toLocaleString()}
-                                </span>
-                            )}
-                        </div>
+                        ))}
                     </RadioGroup>
                 </div>
 
-                {/* Price Range */}
+                {/* Price Range Filter */}
                 <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                        <Label>Price Range</Label>
-                        <span className="text-sm text-muted-foreground">
-                            {formatPrice(localPriceRange[0])} -{" "}
-                            {formatPrice(localPriceRange[1])}
+                    <div className="flex items-center justify-between gap-2">
+                        <Label className="text-sm font-semibold text-foreground shrink-0">
+                            Price Range
+                        </Label>
+                        <span className="text-xs lg:text-sm text-muted-foreground text-right whitespace-nowrap">
+                            {formatPrice(localPriceRange[0], { decimals: 1 })} -{" "}
+                            {formatPrice(localPriceRange[1], { decimals: 1 })}
                         </span>
                     </div>
                     <Slider
@@ -211,15 +312,57 @@ export function FilterSidebar({
                             setLocalPriceRange([values[0], values[1]])
                         }
                         min={0}
-                        max={5000000}
-                        step={50000}
+                        max={MAX_PRICE_RANGE}
+                        step={100000}
                         className="w-full"
                     />
                 </div>
 
-                {/* Reset Button */}
+                {/* Chart Sync Settings */}
+                <div className="space-y-3 border-t pt-4">
+                    <div className="flex items-center justify-between">
+                        <Label className="text-sm font-semibold text-foreground">
+                            Chart Settings
+                        </Label>
+                    </div>
+                    <div className="flex items-center justify-between rounded-md border p-2 lg:p-3 gap-2">
+                        <div className="flex items-center gap-2 pr-1 min-w-0 flex-1">
+                            <Link className="h-4 w-4 text-muted-foreground shrink-0" />
+                            <div className="min-w-0 flex-1">
+                                <p className="text-sm font-medium text-foreground">
+                                    Sync Charts
+                                </p>
+
+                                {syncEnabled ? (
+                                    <p className="text-xs text-muted-foreground break-words">
+                                        Settings are synced between all charts
+                                    </p>
+                                ) : (
+                                    <p className="text-xs text-muted-foreground break-words">
+                                        Apply settings to all charts
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                        <Button
+                            variant={syncEnabled ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => setSyncEnabled(!syncEnabled)}
+                            className="shrink-0"
+                        >
+                            <span className="hidden sm:inline">
+                                {syncEnabled ? "Synced" : "Independent"}
+                            </span>
+                            <span className="sm:hidden">
+                                {syncEnabled ? "On" : "Off"}
+                            </span>
+                        </Button>
+                    </div>
+                </div>
+
                 <Button variant="outline" onClick={onReset} className="w-full">
-                    Reset Filters
+                    <RotateCcwIcon className="h-4 w-4 shrink-0" />
+                    <span className="truncate">Reset Filters</span>
                 </Button>
             </div>
         </aside>

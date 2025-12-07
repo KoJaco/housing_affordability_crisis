@@ -1,15 +1,16 @@
 """Database connection and session management using SQLAlchemy."""
-import os
 from pathlib import Path
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.ext.declarative import declarative_base
 
+from ..config import DATABASE_URL
+
 # Base class for declarative models
 Base = declarative_base()
 
-# Database path - can be configured via environment variable
-DB_PATH = os.getenv("DATABASE_URL", "sqlite:///src/db/database.sqlite")
+# Database path - use config.py as single source of truth
+DB_PATH = DATABASE_URL
 
 # Convert relative path to absolute if needed
 if DB_PATH.startswith("sqlite:///"):

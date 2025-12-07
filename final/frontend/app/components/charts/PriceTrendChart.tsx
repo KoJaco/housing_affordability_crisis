@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
     LineChart,
     Line,
@@ -8,7 +8,19 @@ import {
     Tooltip,
     ResponsiveContainer,
 } from "recharts";
-import { Button } from "~/components/ui/button";
+import { formatPrice, formatPercentage } from "~/lib/formatters";
+import {
+    calculateCutoffDate,
+    formatQuarterString,
+    isQuarterInRange,
+    type TimePeriod,
+} from "~/lib/dateUtils";
+import { isValidPrice, isValidPercentage } from "~/lib/typeGuards";
+import { TimePeriodSelector } from "./TimePeriodSelector";
+import { ChartTooltip } from "./ChartTooltip";
+import { SmoothedToggle } from "./SmoothedToggle";
+import { useChartSettingsStore } from "~/lib/chartSettingsStore";
+import { useIsMobileBreakpoint } from "~/hooks/useIsMobile";
 import type { QuarterlyStats } from "~/types";
 
 interface PriceTrendChartProps {
@@ -16,123 +28,129 @@ interface PriceTrendChartProps {
     height?: number;
 }
 
-type TimePeriod = "1yr" | "3yr" | "5yr" | "max";
-
 export function PriceTrendChart({ data, height = 400 }: PriceTrendChartProps) {
-    const [timePeriod, setTimePeriod] = useState<TimePeriod>("max");
+    const isMobile = useIsMobileBreakpoint();
+    // Get sync state from store
+    const syncEnabled = useChartSettingsStore((state) => state.syncEnabled);
+    const globalTimePeriod = useChartSettingsStore((state) => state.globalTimePeriod);
+    const globalUseSmoothed = useChartSettingsStore((state) => state.globalUseSmoothed);
+    const setGlobalTimePeriod = useChartSettingsStore((state) => state.setGlobalTimePeriod);
+    const setGlobalUseSmoothed = useChartSettingsStore((state) => state.setGlobalUseSmoothed);
+
+    // Local state for when sync is disabled
+    const [localTimePeriod, setLocalTimePeriod] = useState<TimePeriod>("max");
+    const [localUseSmoothed, setLocalUseSmoothed] = useState(false);
+
+    // Use global or local state based on sync
+    const timePeriod = syncEnabled ? globalTimePeriod : localTimePeriod;
+    const useSmoothed = syncEnabled ? globalUseSmoothed : localUseSmoothed;
+
+    const handleTimePeriodChange = (period: TimePeriod) => {
+        if (syncEnabled) {
+            setGlobalTimePeriod(period);
+        } else {
+            setLocalTimePeriod(period);
+        }
+    };
+
+    const handleSmoothedChange = (enabled: boolean) => {
+        if (syncEnabled) {
+            setGlobalUseSmoothed(enabled);
+        } else {
+            setLocalUseSmoothed(enabled);
+        }
+    };
+
+    // Sync local state when sync is enabled
+    useEffect(() => {
+        if (syncEnabled) {
+            setLocalTimePeriod(globalTimePeriod);
+            setLocalUseSmoothed(globalUseSmoothed);
+        }
+    }, [syncEnabled, globalTimePeriod, globalUseSmoothed]);
 
     // Calculate date cutoff based on time period
-    const cutoffDate = useMemo(() => {
-        const now = new Date();
-        const currentYear = now.getFullYear();
-        const currentQuarter = Math.floor(now.getMonth() / 3) + 1;
-
-        switch (timePeriod) {
-            case "1yr":
-                return { year: currentYear - 1, quarter: currentQuarter };
-            case "3yr":
-                return { year: currentYear - 3, quarter: currentQuarter };
-            case "5yr":
-                return { year: currentYear - 5, quarter: currentQuarter };
-            case "max":
-            default:
-                return { year: 2000, quarter: 1 }; // Show all data
-        }
-    }, [timePeriod]);
+    const cutoffDate = useMemo(
+        () => calculateCutoffDate(timePeriod),
+        [timePeriod]
+    );
 
     // Transform quarterly data for chart with time period filter
     const chartData = useMemo(() => {
         return data
             .filter((d) => {
-                if (d.median_price === null) return false;
-                if (timePeriod === "max") return true;
-                // Filter by year and quarter
-                if (d.year > cutoffDate.year) return true;
-                if (
-                    d.year === cutoffDate.year &&
-                    d.quarter >= cutoffDate.quarter
-                )
-                    return true;
-                return false;
+                // Check if we have valid price data (smoothed or raw)
+                const price = useSmoothed
+                    ? d.median_price_smoothed
+                    : d.median_price;
+                if (!isValidPrice(price)) return false;
+                return isQuarterInRange(
+                    d.year,
+                    d.quarter,
+                    cutoffDate,
+                    timePeriod
+                );
             })
-            .map((d) => ({
-                quarter: `Q${d.quarter} ${d.year}`,
-                price: d.median_price!,
-                year: d.year,
-                quarterNum: d.quarter,
-                qoqChange: d.qoq_price_change_percentage,
-            }))
+            .map((d) => {
+                // Prefer smoothed if enabled, fallback to raw
+                const price = useSmoothed
+                    ? (d.median_price_smoothed ?? d.median_price)
+                    : d.median_price;
+
+                return {
+                    quarter: formatQuarterString(d.year, d.quarter),
+                    price: price!,
+                    year: d.year,
+                    quarterNum: d.quarter,
+                    qoqChange: d.qoq_price_change_percentage,
+                };
+            })
             .sort((a, b) => {
                 if (a.year !== b.year) return a.year - b.year;
                 return a.quarterNum - b.quarterNum;
             });
-    }, [data, timePeriod, cutoffDate]);
-
-    const formatPrice = (value: number): string => {
-        if (value >= 1000000) {
-            return `$${(value / 1000000).toFixed(2)}M`;
-        }
-        return `$${(value / 1000).toFixed(0)}K`;
-    };
+    }, [data, timePeriod, cutoffDate, useSmoothed]);
 
     const CustomTooltip = ({ active, payload }: any) => {
-        if (active && payload && payload.length) {
-            const data = payload[0].payload;
-            return (
-                <div className="rounded-lg border bg-white p-3 shadow-lg">
-                    <p className="font-semibold">{data.quarter}</p>
-                    <p className="text-blue-600">{formatPrice(data.price)}</p>
-                    {data.qoqChange !== null && (
-                        <p className="text-sm text-muted-foreground">
-                            QoQ: {data.qoqChange >= 0 ? "+" : ""}
-                            {data.qoqChange.toFixed(1)}%
-                        </p>
-                    )}
-                </div>
-            );
-        }
-        return null;
+        if (!active || !payload || payload.length === 0) return null;
+
+        const data = payload[0].payload;
+        return (
+            <div className="rounded-lg border bg-white p-3 shadow-lg">
+                <p className="font-semibold">{data.quarter}</p>
+                <p className="text-blue-600">{formatPrice(data.price)}</p>
+                {isValidPercentage(data.qoqChange) && (
+                    <p className="text-sm text-muted-foreground">
+                        QoQ: {formatPercentage(data.qoqChange)}
+                    </p>
+                )}
+            </div>
+        );
     };
 
     return (
         <div className="space-y-4">
-            {/* Time Period Selector */}
-            <div className="flex flex-wrap gap-2">
-                <Button
-                    variant={timePeriod === "1yr" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setTimePeriod("1yr")}
-                >
-                    1 Year
-                </Button>
-                <Button
-                    variant={timePeriod === "3yr" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setTimePeriod("3yr")}
-                >
-                    3 Years
-                </Button>
-                <Button
-                    variant={timePeriod === "5yr" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setTimePeriod("5yr")}
-                >
-                    5 Years
-                </Button>
-                <Button
-                    variant={timePeriod === "max" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setTimePeriod("max")}
-                >
-                    Max (20 Years)
-                </Button>
+            <div className="flex items-center justify-between">
+                <TimePeriodSelector
+                    timePeriod={timePeriod}
+                    onTimePeriodChange={handleTimePeriodChange}
+                />
+                <SmoothedToggle
+                    enabled={useSmoothed}
+                    onToggle={handleSmoothedChange}
+                />
             </div>
 
             {/* Chart */}
             <ResponsiveContainer width="100%" height={height}>
                 <LineChart
                     data={chartData}
-                    margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                    margin={{ 
+                        top: 5, 
+                        right: isMobile ? 10 : 30, 
+                        left: isMobile ? 5 : 20, 
+                        bottom: 5 
+                    }}
                 >
                     <CartesianGrid
                         strokeDasharray="3 3"
@@ -147,9 +165,9 @@ export function PriceTrendChart({ data, height = 400 }: PriceTrendChartProps) {
                         interval="preserveStartEnd"
                     />
                     <YAxis
-                        tickFormatter={formatPrice}
+                        tickFormatter={(value) => formatPrice(value as number)}
                         className="text-xs"
-                        width={80}
+                        width={isMobile ? 50 : 80}
                     />
                     <Tooltip content={<CustomTooltip />} />
                     <Line

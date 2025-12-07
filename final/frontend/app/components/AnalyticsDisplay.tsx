@@ -1,16 +1,17 @@
 import { useFetcher } from "react-router";
-import { LoadingSpinner } from "~/components/LoadingSpinner";
 import { SingleSuburbView } from "~/components/SingleSuburbView";
 import { ComparisonView } from "~/components/ComparisonView";
-import { Card, CardContent } from "~/components/ui/card";
+import { Card, CardContent, CardHeader } from "~/components/ui/card";
 import { MapPin } from "lucide-react";
 import type { PropertyType } from "~/types";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 interface AnalyticsDisplayProps {
     selectedSuburbs: string[];
     propertyType: PropertyType;
 }
+
+const LOADING_DEBOUNCE_MS = 300; // Show skeleton only if loading takes longer than 300ms
 
 export function AnalyticsDisplay({
     selectedSuburbs,
@@ -18,6 +19,30 @@ export function AnalyticsDisplay({
 }: AnalyticsDisplayProps) {
     const singleFetcher = useFetcher();
     const bulkFetcher = useFetcher();
+    const [showSkeleton, setShowSkeleton] = useState(false);
+
+    // Determine if we're currently loading
+    const isLoading =
+        (selectedSuburbs.length === 1 && singleFetcher.state === "loading") ||
+        (selectedSuburbs.length > 1 && bulkFetcher.state === "loading");
+
+    // Debounce skeleton display
+    useEffect(() => {
+        if (isLoading) {
+            // Start timer to show skeleton after debounce delay
+            const timer = setTimeout(() => {
+                setShowSkeleton(true);
+            }, LOADING_DEBOUNCE_MS);
+
+            return () => {
+                clearTimeout(timer);
+                setShowSkeleton(false);
+            };
+        } else {
+            // Loading completed, hide skeleton immediately
+            setShowSkeleton(false);
+        }
+    }, [isLoading]);
 
     // Fetch data when suburbs or property type changes
     useEffect(() => {
@@ -43,7 +68,7 @@ export function AnalyticsDisplay({
     // Empty state
     if (selectedSuburbs.length === 0) {
         return (
-            <Card className="m-4">
+            <Card className="m-4 w-full">
                 <CardContent className="flex flex-col items-center justify-center py-12">
                     <MapPin className="mb-4 h-12 w-12 text-muted-foreground" />
                     <h3 className="mb-2 text-lg font-semibold">
@@ -60,17 +85,42 @@ export function AnalyticsDisplay({
         );
     }
 
-    // Loading state
-    if (
-        (selectedSuburbs.length === 1 && singleFetcher.state === "loading") ||
-        (selectedSuburbs.length > 1 && bulkFetcher.state === "loading")
-    ) {
+    // Loading state - only show skeleton if debounced
+    if (isLoading && showSkeleton) {
         return (
-            <Card className="m-4">
-                <CardContent className="flex items-center justify-center py-12">
-                    <LoadingSpinner size="lg" />
-                </CardContent>
-            </Card>
+            <div className="space-y-6 lg:px-0 px-4 pt-4 w-full animate-pulse">
+                {/* Header skeleton */}
+                <div className="space-y-2">
+                    <div className="h-9 w-48 bg-gray-200 rounded-md" />
+                    <div className="h-4 w-64 bg-gray-200 rounded-md" />
+                </div>
+
+                {/* Metric cards skeleton */}
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                    {[1, 2, 3].map((i) => (
+                        <Card key={i}>
+                            <CardContent className="p-6">
+                                <div className="space-y-3">
+                                    <div className="h-4 w-32 bg-gray-200 rounded" />
+                                    <div className="h-8 w-40 bg-gray-200 rounded" />
+                                </div>
+                            </CardContent>
+                        </Card>
+                    ))}
+                </div>
+
+                {/* Chart cards skeleton */}
+                {[1, 2, 3].map((i) => (
+                    <Card key={i}>
+                        <CardHeader>
+                            <div className="h-6 w-32 bg-gray-200 rounded" />
+                        </CardHeader>
+                        <CardContent>
+                            <div className="h-[400px] bg-gray-100 rounded-md" />
+                        </CardContent>
+                    </Card>
+                ))}
+            </div>
         );
     }
 
@@ -138,6 +188,7 @@ export function AnalyticsDisplay({
             <SingleSuburbView
                 suburb={selectedSuburbs[0]}
                 data={singleFetcher.data}
+                propertyType={propertyType}
             />
         );
     }

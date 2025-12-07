@@ -6,6 +6,7 @@ from typing import Optional
 from datetime import date
 
 from ..schemas import Property, PropertyListResponse, PropertyStatsResponse
+from ..utils import validate_property_type, build_where_clause
 from ...db.database import get_db
 
 router = APIRouter(prefix="/api/properties", tags=["properties"])
@@ -33,8 +34,7 @@ def list_properties(
         params["suburb"] = suburb
     
     if property_type:
-        if property_type not in ["house", "unit"]:
-            raise HTTPException(status_code=400, detail="property_type must be 'house' or 'unit'")
+        validate_property_type(property_type)
         conditions.append("property_type = :property_type")
         params["property_type"] = property_type
     
@@ -54,7 +54,7 @@ def list_properties(
         conditions.append("settlement_date <= :end_date")
         params["end_date"] = end_date
     
-    where_clause = " AND ".join(conditions) if conditions else "1=1"
+    where_clause = build_where_clause(conditions, params)
     
     # Get total count
     count_query = text(f"SELECT COUNT(*) FROM properties WHERE {where_clause}")
@@ -155,12 +155,11 @@ def get_property_stats(
         params["suburb"] = suburb
     
     if property_type:
-        if property_type not in ["house", "unit"]:
-            raise HTTPException(status_code=400, detail="property_type must be 'house' or 'unit'")
+        validate_property_type(property_type)
         conditions.append("property_type = :property_type")
         params["property_type"] = property_type
     
-    where_clause = " AND ".join(conditions) if conditions else "1=1"
+    where_clause = build_where_clause(conditions, params)
     
     # Get basic stats
     query = text(f"""
@@ -180,17 +179,34 @@ def get_property_stats(
     count = row[0] if row else 0
     median_price = None
     if count > 0:
-        median_query = text(f"""
-            SELECT sale_price 
-            FROM properties 
-            WHERE {where_clause}
-            ORDER BY sale_price
-            LIMIT 1 OFFSET :offset
-        """)
-        median_offset = count // 2
-        median_result = db.execute(median_query, {**params, "offset": median_offset})
-        median_row = median_result.fetchone()
-        median_price = median_row[0] if median_row else None
+        # For median: if count is odd, get middle value; if even, average two middle values
+        if count % 2 == 1:
+            # Odd count: get the middle value (index count//2)
+            median_offset = count // 2
+            median_query = text(f"""
+                SELECT sale_price 
+                FROM properties 
+                WHERE {where_clause}
+                ORDER BY sale_price
+                LIMIT 1 OFFSET :offset
+            """)
+            median_result = db.execute(median_query, {**params, "offset": median_offset})
+            median_row = median_result.fetchone()
+            median_price = median_row[0] if median_row else None
+        else:
+            # Even count: average the two middle values (indices count//2 - 1 and count//2)
+            median_offset1 = count // 2 - 1
+            median_query = text(f"""
+                SELECT sale_price 
+                FROM properties 
+                WHERE {where_clause}
+                ORDER BY sale_price
+                LIMIT 2 OFFSET :offset
+            """)
+            median_result = db.execute(median_query, {**params, "offset": median_offset1})
+            median_rows = median_result.fetchall()
+            if len(median_rows) == 2:
+                median_price = (median_rows[0][0] + median_rows[1][0]) / 2.0
     
     return PropertyStatsResponse(
         total_count=row[0] or 0,

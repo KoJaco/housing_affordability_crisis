@@ -7,7 +7,7 @@ import {
     SheetTrigger,
 } from "~/components/ui/sheet";
 import { Button } from "~/components/ui/button";
-import { Filter } from "lucide-react";
+import { Filter, ListFilterIcon } from "lucide-react";
 import { FilterSidebar } from "~/components/FilterSidebar";
 import type { PropertyType } from "~/types";
 
@@ -23,6 +23,9 @@ interface MobileFiltersProps {
     searchResults: string[];
     onSelectSuburb: (suburb: string) => void;
     propertyCounts: { all: number; house: number; unit: number } | null;
+    selectedSuburbs: string[];
+    onRemoveSuburb: (suburb: string) => void;
+    onClearAll: () => void;
 }
 
 export function MobileFilters(props: MobileFiltersProps) {
@@ -32,11 +35,14 @@ export function MobileFilters(props: MobileFiltersProps) {
         <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
                 <Button variant="outline" className="lg:hidden">
-                    <Filter className="mr-2 h-4 w-4" />
+                    <ListFilterIcon className="mr-2 h-4 w-4" />
                     Filters
                 </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-80 overflow-y-auto">
+            <SheetContent
+                side="left"
+                className="w-[300px] sm:w-[350px] h-screen overflow-x-hidden z-1000"
+            >
                 <SheetHeader>
                     <SheetTitle>Filters</SheetTitle>
                 </SheetHeader>

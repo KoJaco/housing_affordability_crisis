@@ -5,6 +5,7 @@ from sqlalchemy import text
 from typing import Optional, List
 
 from ..schemas import QuarterlyStats, QuarterlyStatsListResponse
+from ..utils import validate_property_type, build_where_clause
 from ...db.database import get_db
 
 router = APIRouter(prefix="/api/quarterly", tags=["quarterly"])
@@ -32,8 +33,7 @@ def list_quarterly_stats(
         params["suburb"] = suburb
     
     if property_type:
-        if property_type not in ["house", "unit"]:
-            raise HTTPException(status_code=400, detail="property_type must be 'house' or 'unit'")
+        validate_property_type(property_type)
         conditions.append("property_type = :property_type")
         params["property_type"] = property_type
     
@@ -53,7 +53,7 @@ def list_quarterly_stats(
         conditions.append("year <= :end_year")
         params["end_year"] = end_year
     
-    where_clause = " AND ".join(conditions) if conditions else "1=1"
+    where_clause = build_where_clause(conditions, params)
     
     # Get total count
     count_query = text(f"SELECT COUNT(*) FROM suburb_quarterly WHERE {where_clause}")
@@ -62,9 +62,9 @@ def list_quarterly_stats(
     # Get paginated results
     query = text(f"""
         SELECT id, suburb, property_type, year, quarter, quarter_start,
-               num_sales, median_price, mean_price, min_price, max_price,
+               num_sales, median_price, median_price_smoothed, mean_price, min_price, max_price,
                price_stddev, price_p25, price_p75, median_ctsd, mean_ctsd,
-               fast_sales_percentage, liquidity_score, contract_to_settlement_score,
+               fast_sales_percentage, fast_settlements_percentage, liquidity_score, contract_to_settlement_score,
                qoq_price_change_percentage, yoy_price_change_percentage,
                created_at
         FROM suburb_quarterly
@@ -90,20 +90,22 @@ def list_quarterly_stats(
             "quarter_start": row[5],
             "num_sales": row[6],
             "median_price": row[7],
-            "mean_price": row[8],
-            "min_price": row[9],
-            "max_price": row[10],
-            "price_stddev": row[11],
-            "price_p25": row[12],
-            "price_p75": row[13],
-            "median_ctsd": row[14],
-            "mean_ctsd": row[15],
-            "fast_sales_percentage": row[16],
-            "liquidity_score": row[17],
-            "contract_to_settlement_score": row[18],
-            "qoq_price_change_percentage": row[19],
-            "yoy_price_change_percentage": row[20],
-            "created_at": row[21],
+            "median_price_smoothed": row[8],
+            "mean_price": row[9],
+            "min_price": row[10],
+            "max_price": row[11],
+            "price_stddev": row[12],
+            "price_p25": row[13],
+            "price_p75": row[14],
+            "median_ctsd": row[15],
+            "mean_ctsd": row[16],
+            "fast_sales_percentage": row[17],
+            "fast_settlements_percentage": row[18],
+            "liquidity_score": row[19],
+            "contract_to_settlement_score": row[20],
+            "qoq_price_change_percentage": row[21],
+            "yoy_price_change_percentage": row[22],
+            "created_at": row[23],
         }
         stats_list.append(QuarterlyStats(**stats_dict))
     
@@ -128,8 +130,7 @@ def get_suburb_quarterly_stats(
     params = {"suburb": suburb}
     
     if property_type:
-        if property_type not in ["house", "unit"]:
-            raise HTTPException(status_code=400, detail="property_type must be 'house' or 'unit'")
+        validate_property_type(property_type)
         conditions.append("property_type = :property_type")
         params["property_type"] = property_type
     
@@ -141,13 +142,13 @@ def get_suburb_quarterly_stats(
         conditions.append("year <= :end_year")
         params["end_year"] = end_year
     
-    where_clause = " AND ".join(conditions)
+    where_clause = build_where_clause(conditions, params)
     
     query = text(f"""
         SELECT id, suburb, property_type, year, quarter, quarter_start,
-               num_sales, median_price, mean_price, min_price, max_price,
+               num_sales, median_price, median_price_smoothed, mean_price, min_price, max_price,
                price_stddev, price_p25, price_p75, median_ctsd, mean_ctsd,
-               fast_sales_percentage, liquidity_score, contract_to_settlement_score,
+               fast_sales_percentage, fast_settlements_percentage, liquidity_score, contract_to_settlement_score,
                qoq_price_change_percentage, yoy_price_change_percentage,
                created_at
         FROM suburb_quarterly
@@ -172,20 +173,22 @@ def get_suburb_quarterly_stats(
             "quarter_start": row[5],
             "num_sales": row[6],
             "median_price": row[7],
-            "mean_price": row[8],
-            "min_price": row[9],
-            "max_price": row[10],
-            "price_stddev": row[11],
-            "price_p25": row[12],
-            "price_p75": row[13],
-            "median_ctsd": row[14],
-            "mean_ctsd": row[15],
-            "fast_sales_percentage": row[16],
-            "liquidity_score": row[17],
-            "contract_to_settlement_score": row[18],
-            "qoq_price_change_percentage": row[19],
-            "yoy_price_change_percentage": row[20],
-            "created_at": row[21],
+            "median_price_smoothed": row[8],
+            "mean_price": row[9],
+            "min_price": row[10],
+            "max_price": row[11],
+            "price_stddev": row[12],
+            "price_p25": row[13],
+            "price_p75": row[14],
+            "median_ctsd": row[15],
+            "mean_ctsd": row[16],
+            "fast_sales_percentage": row[17],
+            "fast_settlements_percentage": row[18],
+            "liquidity_score": row[19],
+            "contract_to_settlement_score": row[20],
+            "qoq_price_change_percentage": row[21],
+            "yoy_price_change_percentage": row[22],
+            "created_at": row[23],
         }
         stats_list.append(QuarterlyStats(**stats_dict))
     

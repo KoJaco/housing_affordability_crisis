@@ -13,6 +13,7 @@ export interface SuburbAnalytics {
   
   // Current metrics
   current_median_price: number | null;
+  current_median_price_smoothed: number | null;
   current_avg_ctsd: number | null;
   current_num_sales: number | null;
   
@@ -24,6 +25,15 @@ export interface SuburbAnalytics {
   growth_since_2005_percentage: number | null;
   cagr_5yr: number | null;
   cagr_10yr: number | null;
+  
+  // Smoothed growth rates
+  growth_1yr_percentage_smoothed: number | null;
+  growth_3yr_percentage_smoothed: number | null;
+  growth_5yr_percentage_smoothed: number | null;
+  growth_10yr_percentage_smoothed: number | null;
+  growth_since_2005_percentage_smoothed: number | null;
+  cagr_5yr_smoothed: number | null;
+  cagr_10yr_smoothed: number | null;
   
   // Risk & market health
   volatility_score: number | null;
@@ -69,6 +79,7 @@ export interface QuarterlyStats {
   quarter_start: string; // ISO date string
   num_sales: number;
   median_price: number | null;
+  median_price_smoothed: number | null;
   mean_price: number | null;
   min_price: number | null;
   max_price: number | null;

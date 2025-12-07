@@ -8,7 +8,12 @@ import {
 import type { FeatureCollection, Feature } from "geojson";
 import { Card } from "~/components/ui/card";
 import { LoadingSpinner } from "~/components/LoadingSpinner";
-import { cn } from "~/lib/utils";
+import {
+    getSuburbNameFromFeature,
+    getPriceColor,
+    isLayerInteractive,
+    disableLayerInteraction,
+} from "~/lib/mapUtils";
 
 interface SydneyMapProps {
     geoJsonData: FeatureCollection | null;
@@ -43,7 +48,7 @@ function MapEventHandler({
 // Legend component
 function MapLegend() {
     return (
-        <Card className="absolute bottom-4 right-4 z-[1000] bg-white/95 p-3 shadow-lg">
+        <Card className="absolute bottom-4 right-4 z-[1000] bg-background p-2 shadow-lg">
             <div className="space-y-2 text-xs">
                 <div className="font-semibold">Price Range</div>
                 <div className="flex items-center gap-2">
@@ -71,39 +76,6 @@ function MapLegend() {
     );
 }
 
-// Helper function to extract and normalize suburb name from GeoJSON feature
-function getSuburbName(feature: Feature): string | null {
-    if (!feature.properties) return null;
-    
-    const props = feature.properties as Record<string, any>;
-    
-    // Try multiple possible property names (case-insensitive)
-    const possibleKeys = ['suburb', 'suburbname', 'SUBURB', 'SUBURBNAME'];
-    
-    for (const key of possibleKeys) {
-        // Try exact match first
-        if (key in props && props[key]) {
-            const value = props[key];
-            if (typeof value === 'string' && value.trim()) {
-                return value.trim().toUpperCase();
-            }
-        }
-        
-        // Try case-insensitive match
-        const lowerKey = key.toLowerCase();
-        for (const propKey in props) {
-            if (propKey.toLowerCase() === lowerKey && props[propKey]) {
-                const value = props[propKey];
-                if (typeof value === 'string' && value.trim()) {
-                    return value.trim().toUpperCase();
-                }
-            }
-        }
-    }
-    
-    return null;
-}
-
 export default function SydneyMap({
     geoJsonData,
     suburbData,
@@ -112,45 +84,6 @@ export default function SydneyMap({
     onSuburbClick,
 }: SydneyMapProps) {
     const [hoveredSuburb, setHoveredSuburb] = useState<string | null>(null);
-
-    // Debug: Log suburb matching statistics
-    useEffect(() => {
-        if (!geoJsonData || !suburbData) return;
-        
-        const geoJsonSuburbs = new Set<string>();
-        const matchedSuburbs = new Set<string>();
-        const unmatchedSuburbs = new Set<string>();
-        
-        geoJsonData.features.forEach((feature) => {
-            const suburbName = getSuburbName(feature);
-            if (suburbName) {
-                geoJsonSuburbs.add(suburbName);
-                if (suburbName in suburbData) {
-                    matchedSuburbs.add(suburbName);
-                } else {
-                    unmatchedSuburbs.add(suburbName);
-                }
-            }
-        });
-        
-        console.log(`[Map Debug] GeoJSON suburbs: ${geoJsonSuburbs.size}`);
-        console.log(`[Map Debug] Matched with data: ${matchedSuburbs.size}`);
-        console.log(`[Map Debug] Unmatched (no data): ${unmatchedSuburbs.size}`);
-        
-        if (unmatchedSuburbs.size > 0 && unmatchedSuburbs.size <= 20) {
-            console.log(`[Map Debug] Unmatched suburbs:`, Array.from(unmatchedSuburbs).slice(0, 20));
-        }
-    }, [geoJsonData, suburbData]);
-
-    // Get color based on median price
-    const getPriceColor = (price: number | null): string => {
-        if (price === null) return "#e5e7eb"; // Gray for no data
-
-        if (price > 2000000) return "#dc2626"; // Red
-        if (price > 1500000) return "#f97316"; // Orange
-        if (price > 1000000) return "#fbbf24"; // Yellow
-        return "#10b981"; // Green
-    };
 
     // Style function for GeoJSON features
     const styleFeature = useMemo(() => {
@@ -163,7 +96,7 @@ export default function SydneyMap({
                     weight: 1,
                 };
             }
-            const suburbName = getSuburbName(feature);
+            const suburbName = getSuburbNameFromFeature(feature);
             if (!suburbName) {
                 return {
                     fillColor: "#e5e7eb",
@@ -205,37 +138,19 @@ export default function SydneyMap({
 
     // Handle feature events
     const onEachFeature = (feature: Feature, layer: any) => {
-        const suburbName = getSuburbName(feature);
+        const suburbName = getSuburbNameFromFeature(feature);
         if (!suburbName) return;
 
         const isFiltered = filteredSuburbs.has(suburbName);
 
         // Only add interactivity for filtered suburbs
         if (!isFiltered) {
-            // Disable all interaction for filtered-out suburbs
-            if (layer) {
-                // Disable pointer events and interaction
-                if (typeof layer.setInteractive === "function") {
-                    layer.setInteractive(false);
-                }
-                // Remove any existing event handlers
-                if (typeof layer.off === "function") {
-                    layer.off("click mouseover mouseout");
-                }
-                // Set style to invisible
-                if (typeof layer.setStyle === "function") {
-                    layer.setStyle({
-                        fillOpacity: 0,
-                        opacity: 0,
-                        weight: 0,
-                    });
-                }
-            }
+            disableLayerInteraction(layer);
             return;
         }
 
         // Enable interaction for filtered suburbs
-        if (layer && typeof layer.setInteractive === "function") {
+        if (isLayerInteractive(layer)) {
             layer.setInteractive(true);
         }
 
@@ -295,7 +210,11 @@ export default function SydneyMap({
             <MapContainer
                 center={[-33.87, 151.21]}
                 zoom={11}
-                style={{ height: "100%", width: "100%" }}
+                style={{
+                    height: "100%",
+                    width: "100%",
+                    borderRadius: "10px 10px 10px 10px",
+                }}
                 scrollWheelZoom={true}
                 className="z-0"
             >

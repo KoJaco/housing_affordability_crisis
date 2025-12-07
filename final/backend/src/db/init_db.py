@@ -3,7 +3,7 @@ import sqlite3
 from pathlib import Path
 
 
-def init_database(db_path: str = "src/db/database.sqlite", schema_path: str = "src/db/schma.sql"):
+def init_database(db_path: str = "src/db/database.sqlite", schema_path: str = "src/db/schema.sql"):
     """
     Initialize SQLite database from schema file.
    
@@ -127,7 +127,7 @@ if __name__ == "__main__":
     
     # Allow custom paths via command line
     db_file = sys.argv[1] if len(sys.argv) > 1 else "src/db/database.sqlite"
-    schema_file = sys.argv[2] if len(sys.argv) > 2 else "src/db/schma.sql"
+    schema_file = sys.argv[2] if len(sys.argv) > 2 else "src/db/schema.sql"
     
     init_database()
 

@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 
 from ..schemas import Analytics, AnalyticsListResponse, SuburbSearchResponse
+from ..utils import validate_property_type, build_where_clause
 from ...db.database import get_db
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
@@ -30,8 +31,7 @@ def list_analytics(
         params["suburb"] = suburb
     
     if property_type:
-        if property_type not in ["house", "unit"]:
-            raise HTTPException(status_code=400, detail="property_type must be 'house' or 'unit'")
+        validate_property_type(property_type)
         conditions.append("property_type = :property_type")
         params["property_type"] = property_type
     
@@ -39,7 +39,7 @@ def list_analytics(
         conditions.append("current_median_price >= :min_price")
         params["min_price"] = min_price
     
-    where_clause = " AND ".join(conditions) if conditions else "1=1"
+    where_clause = build_where_clause(conditions, params)
     
     # Validate sort_by
     valid_sorts = ["suburb", "price_rank", "growth_rank", "speed_rank", "current_median_price"]
@@ -53,10 +53,14 @@ def list_analytics(
     # Get paginated results
     query = text(f"""
         SELECT suburb, property_type, last_updated, current_quarter,
-               current_median_price, current_avg_ctsd, current_num_sales,
+               current_median_price, current_median_price_smoothed, current_avg_ctsd, current_num_sales,
                growth_1yr_percentage, growth_3yr_percentage, growth_5yr_percentage,
                growth_10yr_percentage, growth_since_2005_percentage,
-               cagr_5yr, cagr_10yr, volatility_score, max_drawdown_pct,
+               cagr_5yr, cagr_10yr,
+               growth_1yr_percentage_smoothed, growth_3yr_percentage_smoothed, growth_5yr_percentage_smoothed,
+               growth_10yr_percentage_smoothed, growth_since_2005_percentage_smoothed,
+               cagr_5yr_smoothed, cagr_10yr_smoothed,
+               volatility_score, max_drawdown_pct,
                recovery_quarters, avg_quarterly_volume, overall_liquidity_score,
                market_health_score, q1_avg_premium_percentage, q2_avg_premium_percentage,
                q3_avg_premium_percentage, q4_avg_premium_percentage, best_quarter_to_sell,
@@ -85,39 +89,47 @@ def list_analytics(
             "last_updated": row[2],
             "current_quarter": row[3],
             "current_median_price": row[4],
-            "current_avg_ctsd": row[5],
-            "current_num_sales": row[6],
-            "growth_1yr_percentage": row[7],
-            "growth_3yr_percentage": row[8],
-            "growth_5yr_percentage": row[9],
-            "growth_10yr_percentage": row[10],
-            "growth_since_2005_percentage": row[11],
-            "cagr_5yr": row[12],
-            "cagr_10yr": row[13],
-            "volatility_score": row[14],
-            "max_drawdown_pct": row[15],
-            "recovery_quarters": row[16],
-            "avg_quarterly_volume": row[17],
-            "overall_liquidity_score": row[18],
-            "market_health_score": row[19],
-            "q1_avg_premium_percentage": row[20],
-            "q2_avg_premium_percentage": row[21],
-            "q3_avg_premium_percentage": row[22],
-            "q4_avg_premium_percentage": row[23],
-            "best_quarter_to_sell": row[24],
-            "forecast_q1_price": row[25],
-            "forecast_q1_lower": row[26],
-            "forecast_q1_upper": row[27],
-            "forecast_q2_price": row[28],
-            "forecast_q2_lower": row[29],
-            "forecast_q2_upper": row[30],
-            "price_rank": row[31],
-            "growth_rank": row[32],
-            "speed_rank": row[33],
-            "total_quarters_with_data": row[34],
-            "data_completeness_percentage": row[35],
-            "price_quarterly": row[36],
-            "ctsd_quarterly": row[37],
+            "current_median_price_smoothed": row[5],
+            "current_avg_ctsd": row[6],
+            "current_num_sales": row[7],
+            "growth_1yr_percentage": row[8],
+            "growth_3yr_percentage": row[9],
+            "growth_5yr_percentage": row[10],
+            "growth_10yr_percentage": row[11],
+            "growth_since_2005_percentage": row[12],
+            "cagr_5yr": row[13],
+            "cagr_10yr": row[14],
+            "growth_1yr_percentage_smoothed": row[15],
+            "growth_3yr_percentage_smoothed": row[16],
+            "growth_5yr_percentage_smoothed": row[17],
+            "growth_10yr_percentage_smoothed": row[18],
+            "growth_since_2005_percentage_smoothed": row[19],
+            "cagr_5yr_smoothed": row[20],
+            "cagr_10yr_smoothed": row[21],
+            "volatility_score": row[22],
+            "max_drawdown_pct": row[23],
+            "recovery_quarters": row[24],
+            "avg_quarterly_volume": row[25],
+            "overall_liquidity_score": row[26],
+            "market_health_score": row[27],
+            "q1_avg_premium_percentage": row[28],
+            "q2_avg_premium_percentage": row[29],
+            "q3_avg_premium_percentage": row[30],
+            "q4_avg_premium_percentage": row[31],
+            "best_quarter_to_sell": row[32],
+            "forecast_q1_price": row[33],
+            "forecast_q1_lower": row[34],
+            "forecast_q1_upper": row[35],
+            "forecast_q2_price": row[36],
+            "forecast_q2_lower": row[37],
+            "forecast_q2_upper": row[38],
+            "price_rank": row[39],
+            "growth_rank": row[40],
+            "speed_rank": row[41],
+            "total_quarters_with_data": row[42],
+            "data_completeness_percentage": row[43],
+            "price_quarterly": row[44],
+            "ctsd_quarterly": row[45],
         }
         analytics_list.append(Analytics(**analytics_dict))
     
@@ -140,8 +152,7 @@ def get_suburb_analytics(
     params = {"suburb": suburb}
     
     if property_type:
-        if property_type not in ["house", "unit"]:
-            raise HTTPException(status_code=400, detail="property_type must be 'house' or 'unit'")
+        validate_property_type(property_type)
         conditions.append("property_type = :property_type")
         params["property_type"] = property_type
     
@@ -149,10 +160,14 @@ def get_suburb_analytics(
     
     query = text(f"""
         SELECT suburb, property_type, last_updated, current_quarter,
-               current_median_price, current_avg_ctsd, current_num_sales,
+               current_median_price, current_median_price_smoothed, current_avg_ctsd, current_num_sales,
                growth_1yr_percentage, growth_3yr_percentage, growth_5yr_percentage,
                growth_10yr_percentage, growth_since_2005_percentage,
-               cagr_5yr, cagr_10yr, volatility_score, max_drawdown_pct,
+               cagr_5yr, cagr_10yr,
+               growth_1yr_percentage_smoothed, growth_3yr_percentage_smoothed, growth_5yr_percentage_smoothed,
+               growth_10yr_percentage_smoothed, growth_since_2005_percentage_smoothed,
+               cagr_5yr_smoothed, cagr_10yr_smoothed,
+               volatility_score, max_drawdown_pct,
                recovery_quarters, avg_quarterly_volume, overall_liquidity_score,
                market_health_score, q1_avg_premium_percentage, q2_avg_premium_percentage,
                q3_avg_premium_percentage, q4_avg_premium_percentage, best_quarter_to_sell,
@@ -180,39 +195,47 @@ def get_suburb_analytics(
             "last_updated": row[2],
             "current_quarter": row[3],
             "current_median_price": row[4],
-            "current_avg_ctsd": row[5],
-            "current_num_sales": row[6],
-            "growth_1yr_percentage": row[7],
-            "growth_3yr_percentage": row[8],
-            "growth_5yr_percentage": row[9],
-            "growth_10yr_percentage": row[10],
-            "growth_since_2005_percentage": row[11],
-            "cagr_5yr": row[12],
-            "cagr_10yr": row[13],
-            "volatility_score": row[14],
-            "max_drawdown_pct": row[15],
-            "recovery_quarters": row[16],
-            "avg_quarterly_volume": row[17],
-            "overall_liquidity_score": row[18],
-            "market_health_score": row[19],
-            "q1_avg_premium_percentage": row[20],
-            "q2_avg_premium_percentage": row[21],
-            "q3_avg_premium_percentage": row[22],
-            "q4_avg_premium_percentage": row[23],
-            "best_quarter_to_sell": row[24],
-            "forecast_q1_price": row[25],
-            "forecast_q1_lower": row[26],
-            "forecast_q1_upper": row[27],
-            "forecast_q2_price": row[28],
-            "forecast_q2_lower": row[29],
-            "forecast_q2_upper": row[30],
-            "price_rank": row[31],
-            "growth_rank": row[32],
-            "speed_rank": row[33],
-            "total_quarters_with_data": row[34],
-            "data_completeness_percentage": row[35],
-            "price_quarterly": row[36],
-            "ctsd_quarterly": row[37],
+            "current_median_price_smoothed": row[5],
+            "current_avg_ctsd": row[6],
+            "current_num_sales": row[7],
+            "growth_1yr_percentage": row[8],
+            "growth_3yr_percentage": row[9],
+            "growth_5yr_percentage": row[10],
+            "growth_10yr_percentage": row[11],
+            "growth_since_2005_percentage": row[12],
+            "cagr_5yr": row[13],
+            "cagr_10yr": row[14],
+            "growth_1yr_percentage_smoothed": row[15],
+            "growth_3yr_percentage_smoothed": row[16],
+            "growth_5yr_percentage_smoothed": row[17],
+            "growth_10yr_percentage_smoothed": row[18],
+            "growth_since_2005_percentage_smoothed": row[19],
+            "cagr_5yr_smoothed": row[20],
+            "cagr_10yr_smoothed": row[21],
+            "volatility_score": row[22],
+            "max_drawdown_pct": row[23],
+            "recovery_quarters": row[24],
+            "avg_quarterly_volume": row[25],
+            "overall_liquidity_score": row[26],
+            "market_health_score": row[27],
+            "q1_avg_premium_percentage": row[28],
+            "q2_avg_premium_percentage": row[29],
+            "q3_avg_premium_percentage": row[30],
+            "q4_avg_premium_percentage": row[31],
+            "best_quarter_to_sell": row[32],
+            "forecast_q1_price": row[33],
+            "forecast_q1_lower": row[34],
+            "forecast_q1_upper": row[35],
+            "forecast_q2_price": row[36],
+            "forecast_q2_lower": row[37],
+            "forecast_q2_upper": row[38],
+            "price_rank": row[39],
+            "growth_rank": row[40],
+            "speed_rank": row[41],
+            "total_quarters_with_data": row[42],
+            "data_completeness_percentage": row[43],
+            "price_quarterly": row[44],
+            "ctsd_quarterly": row[45],
         }
         analytics_list.append(Analytics(**analytics_dict))
     

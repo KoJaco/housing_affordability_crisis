@@ -41,6 +41,7 @@ CREATE TABLE suburb_quarterly (
     
     -- Price metrics (based on sales prices within the quarter)
     median_price REAL,
+    median_price_smoothed REAL, -- applied exponential smoothing to median price
     mean_price REAL,
     min_price REAL,
     max_price REAL,
@@ -85,10 +86,11 @@ CREATE TABLE suburb_analytics (
     -- Current state (most recent quarter)
     current_quarter TEXT,  -- e.g., '2024-Q4'
     current_median_price REAL,
+    current_median_price_smoothed REAL,
     current_avg_ctsd REAL,
     current_num_sales INTEGER,
     
-    -- Growth rates
+    -- Growth rates (raw)
     growth_1yr_percentage REAL,
     growth_3yr_percentage REAL,
     growth_5yr_percentage REAL,
@@ -96,6 +98,15 @@ CREATE TABLE suburb_analytics (
     growth_since_2005_percentage REAL,
     cagr_5yr REAL,  -- Compound annual growth rate
     cagr_10yr REAL,
+
+    -- Growth rates (smoothed)
+    growth_1yr_percentage_smoothed REAL,
+    growth_3yr_percentage_smoothed REAL,
+    growth_5yr_percentage_smoothed REAL,
+    growth_10yr_percentage_smoothed REAL,
+    growth_since_2005_percentage_smoothed REAL,
+    cagr_5yr_smoothed REAL,
+    cagr_10yr_smoothed REAL,
     
     -- Risk/volatility (calculated from quarterly data)
     volatility_score REAL,  -- Std dev of quarterly returns

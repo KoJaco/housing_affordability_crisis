@@ -12,11 +12,16 @@ FROM node:20-alpine AS build-env
 COPY . /app/
 COPY --from=development-dependencies-env /app/node_modules /app/node_modules
 WORKDIR /app
+ARG API_BASE_URL=https://property-api.fly.dev
+ENV API_BASE_URL=$API_BASE_URL
 RUN npm run build
 
 FROM node:20-alpine
 COPY ./package.json package-lock.json /app/
 COPY --from=production-dependencies-env /app/node_modules /app/node_modules
 COPY --from=build-env /app/build /app/build
+COPY --from=build-env /app/public /app/public
 WORKDIR /app
+EXPOSE 3000
+ENV PORT=3000
 CMD ["npm", "run", "start"]

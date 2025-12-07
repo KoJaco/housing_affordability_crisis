@@ -1,6 +1,10 @@
 import type { Route } from "./+types/api.suburb.$suburbName";
 import { fetchSuburbData } from "~/lib/api";
 import type { SuburbData } from "~/types";
+import {
+    validateSuburbName,
+    handleApiError,
+} from "~/lib/apiErrorHandler";
 
 export async function loader({ params, request }: Route.LoaderArgs) {
     const suburb = params.suburbName;
@@ -10,8 +14,10 @@ export async function loader({ params, request }: Route.LoaderArgs) {
         | "house"
         | "unit";
 
-    if (!suburb) {
-        throw { error: "Suburb name is required", status: 400 };
+    try {
+        validateSuburbName(suburb);
+    } catch (error) {
+        throw error;
     }
 
     try {
@@ -27,19 +33,9 @@ export async function loader({ params, request }: Route.LoaderArgs) {
         return data as SuburbData;
     } catch (error) {
         console.error(`Error loading suburb data for ${suburb}:`, error);
-
-        // Check if it's a "not found" error
-        if (error instanceof Error && error.message.includes("not found")) {
-            return {
-                error: `No data found for suburb: ${suburb}`,
-                status: 404,
-            };
-        }
-
-        return {
-            error: "Failed to load suburb data",
-            details: error instanceof Error ? error.message : "Unknown error",
-            status: 500,
-        };
+        return handleApiError(
+            error,
+            "Failed to load suburb data"
+        );
     }
 }
