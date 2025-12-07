@@ -41,7 +41,7 @@ export function MobileFilters(props: MobileFiltersProps) {
             </SheetTrigger>
             <SheetContent
                 side="left"
-                className="w-[300px] sm:w-[350px] h-screen overflow-x-hidden z-1000"
+                className="w-[300px] sm:w-[350px] h-screen overflow-x-hidden"
             >
                 <SheetHeader>
                     <SheetTitle>Filters</SheetTitle>
