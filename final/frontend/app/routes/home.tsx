@@ -1,5 +1,5 @@
 import type { Route } from "./+types/home";
-import { Link } from "react-router";
+import { Link, redirect, type LoaderFunctionArgs } from "react-router";
 import { Button } from "~/components/ui/button";
 import {
     BarChart3,
@@ -78,6 +78,18 @@ const features: Feature[] = [
         comingSoon: true,
     },
 ];
+
+export async function loader({ request }: LoaderFunctionArgs) {
+    const url = new URL(request.url);
+
+    // Redirect www -> root (investmapp.com as the preferred)
+    if (url.hostname === "www.investmapp.com") {
+        url.hostname = "investmapp.com";
+        return redirect(url.toString(), 301);
+    }
+
+    return null;
+}
 
 export function meta({}: Route.MetaArgs) {
     return [
