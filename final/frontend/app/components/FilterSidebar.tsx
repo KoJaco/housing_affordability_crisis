@@ -23,6 +23,50 @@ import { MAX_PRICE_RANGE, MAX_SELECTED_SUBURBS } from "~/lib/constants";
 import { useFilterSidebar } from "~/hooks/useFilterSidebar";
 import type { PropertyType } from "~/types";
 import { Badge } from "./ui/badge";
+import { useMemo } from "react";
+
+// Non-linear scale constants for price slider
+const SLIDER_MAX = 100;
+const COMMON_RANGE_MAX = 3_000_000; // 3 million - most common price range
+const COMMON_RANGE_PERCENTAGE = 0.8; // 80% of slider for 0-3M range
+
+/**
+ * Converts slider position (0-100) to actual price value
+ * Uses non-linear scale: 0-80% of slider maps to 0-3M, 80-100% maps to 3M-35M
+ */
+function sliderToPrice(sliderValue: number): number {
+    if (sliderValue <= SLIDER_MAX * COMMON_RANGE_PERCENTAGE) {
+        // Map 0-80% of slider to 0-3M
+        const ratio = sliderValue / (SLIDER_MAX * COMMON_RANGE_PERCENTAGE);
+        return ratio * COMMON_RANGE_MAX;
+    } else {
+        // Map 80-100% of slider to 3M-35M
+        const ratio =
+            (sliderValue - SLIDER_MAX * COMMON_RANGE_PERCENTAGE) /
+            (SLIDER_MAX * (1 - COMMON_RANGE_PERCENTAGE));
+        return COMMON_RANGE_MAX + ratio * (MAX_PRICE_RANGE - COMMON_RANGE_MAX);
+    }
+}
+
+/**
+ * Converts actual price value to slider position (0-100)
+ * Uses non-linear scale: 0-3M maps to 0-80% of slider, 3M-35M maps to 80-100%
+ */
+function priceToSlider(price: number): number {
+    if (price <= COMMON_RANGE_MAX) {
+        // Map 0-3M to 0-80% of slider
+        const ratio = price / COMMON_RANGE_MAX;
+        return ratio * SLIDER_MAX * COMMON_RANGE_PERCENTAGE;
+    } else {
+        // Map 3M-35M to 80-100% of slider
+        const ratio =
+            (price - COMMON_RANGE_MAX) / (MAX_PRICE_RANGE - COMMON_RANGE_MAX);
+        return (
+            SLIDER_MAX * COMMON_RANGE_PERCENTAGE +
+            ratio * SLIDER_MAX * (1 - COMMON_RANGE_PERCENTAGE)
+        );
+    }
+}
 
 interface FilterSidebarProps {
     searchTerm: string;
@@ -78,6 +122,15 @@ export function FilterSidebar({
         priceRange,
         onPriceRangeChange,
     });
+
+    // Convert price range to slider values using non-linear scale
+    const sliderValues = useMemo(
+        () => [
+            priceToSlider(localPriceRange[0]),
+            priceToSlider(localPriceRange[1]),
+        ],
+        [localPriceRange]
+    );
 
     return (
         <aside className="sticky top-10 h-screen w-full lg:w-80 overflow-y-auto px-2 lg:px-4 text-foreground/75">
@@ -307,13 +360,17 @@ export function FilterSidebar({
                         </span>
                     </div>
                     <Slider
-                        value={localPriceRange}
-                        onValueChange={(values) =>
-                            setLocalPriceRange([values[0], values[1]])
-                        }
+                        value={sliderValues}
+                        onValueChange={(values) => {
+                            const newPriceRange: [number, number] = [
+                                sliderToPrice(values[0]),
+                                sliderToPrice(values[1]),
+                            ];
+                            setLocalPriceRange(newPriceRange);
+                        }}
                         min={0}
-                        max={MAX_PRICE_RANGE}
-                        step={100000}
+                        max={SLIDER_MAX}
+                        step={0.1}
                         className="w-full"
                     />
                 </div>
