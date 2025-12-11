@@ -208,6 +208,8 @@ export function ComparisonView({ suburbs, data }: ComparisonViewProps) {
                         analytics.current_avg_ctsd != null
                             ? -analytics.current_avg_ctsd
                             : null;
+                case "sales":
+                    value = analytics.current_num_sales ?? null;
                     break;
             }
 
@@ -227,6 +229,7 @@ export function ComparisonView({ suburbs, data }: ComparisonViewProps) {
     const bestPrice = getBestValue("price", true);
     const bestGrowth = getBestValue("growth", true);
     const bestSpeed = getBestValue("speed", false);
+    const bestSales = getBestValue("sales", true);
 
     const comparisonRows = [
         {
@@ -261,12 +264,12 @@ export function ComparisonView({ suburbs, data }: ComparisonViewProps) {
                 const value = data[suburb]?.analytics?.current_num_sales;
                 return formatSales(value);
             },
-            best: null,
+            best: bestSales,
         },
     ];
 
     return (
-        <div className="space-y-6 w-full lg:px-0 px-4 pt-4">
+        <div className="space-y-6 w-full min-w-0 lg:px-0 px-4 pt-4">
             {/* Header */}
             <div>
                 <h2 className="text-3xl font-bold">Comparison</h2>
@@ -280,22 +283,22 @@ export function ComparisonView({ suburbs, data }: ComparisonViewProps) {
             </div>
 
             {/* Comparison Table */}
-            <Card>
+            <Card className="w-full max-w-full overflow-hidden">
                 <CardHeader>
                     <CardTitle>Key Metrics Comparison</CardTitle>
                 </CardHeader>
-                <CardContent>
-                    <div className="overflow-x-auto">
-                        <Table>
+                <CardContent className="w-full min-w-0 p-0 max-w-full">
+                    <div className="overflow-x-auto w-full px-6 max-w-full">
+                        <Table className="min-w-max">
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead className="sticky left-0 bg-white">
+                                    <TableHead className="sticky left-0 bg-white z-10 min-w-[150px]">
                                         Metric
                                     </TableHead>
                                     {suburbs.map((suburb) => (
                                         <TableHead
                                             key={suburb}
-                                            className="text-center"
+                                            className="text-center min-w-[120px] whitespace-nowrap"
                                         >
                                             {suburb}
                                         </TableHead>
@@ -305,13 +308,13 @@ export function ComparisonView({ suburbs, data }: ComparisonViewProps) {
                             <TableBody>
                                 {comparisonRows.map((row) => (
                                     <TableRow key={row.label}>
-                                        <TableCell className="sticky left-0 bg-white font-medium">
+                                        <TableCell className="sticky left-0 bg-white font-medium z-10 min-w-[150px]">
                                             {row.label}
                                         </TableCell>
                                         {suburbs.map((suburb) => (
                                             <TableCell
                                                 key={suburb}
-                                                className={`text-center ${
+                                                className={`text-center whitespace-nowrap ${
                                                     row.best === suburb
                                                         ? "bg-green-50 dark:bg-green-950"
                                                         : ""

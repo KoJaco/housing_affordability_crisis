@@ -79,5 +79,3 @@ export function useSuburbSelection(filteredSuburbs: Set<string>) {
         handleSelectSuburb,
     };
 }
-
-

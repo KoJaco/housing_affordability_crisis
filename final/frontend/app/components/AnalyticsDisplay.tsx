@@ -196,7 +196,12 @@ export function AnalyticsDisplay({
     // Comparison view
     if (selectedSuburbs.length > 1 && bulkFetcher.data) {
         return (
-            <ComparisonView suburbs={selectedSuburbs} data={bulkFetcher.data} />
+            <div className="w-full min-w-0 max-w-full">
+                <ComparisonView
+                    suburbs={selectedSuburbs}
+                    data={bulkFetcher.data}
+                />
+            </div>
         );
     }
 

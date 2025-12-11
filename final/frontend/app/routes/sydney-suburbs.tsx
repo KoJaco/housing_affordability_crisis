@@ -124,10 +124,10 @@ export default function Analyze() {
                 message="Loading Sydney suburbs..."
             />
             <PageTransition>
-                <div className="min-h-screen bg-background">
+                <div className="min-h-screen bg-background overflow-x-hidden">
                     <Header />
 
-                    <div className="flex max-w-7xl mx-auto lg:mt-10 pr-4">
+                    <div className="flex max-w-7xl mx-auto lg:mt-10 pr-4 min-w-0">
                         {/* Desktop Sidebar */}
                         <div className="hidden lg:block pr-4">
                             <FilterSidebar
@@ -139,7 +139,7 @@ export default function Analyze() {
                         </div>
 
                         {/* Main Content */}
-                        <main className="flex-1 flex flex-col items-center justify-start pb-10 lg:pl-0 pl-4">
+                        <main className="flex-1 flex flex-col items-center justify-start pb-10 lg:pl-0 pl-4 min-w-0 max-w-full">
                             {/* Mobile Filters */}
                             <div className="lg:hidden py-4 w-full">
                                 <MobileFilters

@@ -41,7 +41,7 @@ export function validateSuburbsList(suburbs: string[]): void {
         throw { error: "At least one suburb is required", status: 400 };
     }
 
-    if (suburbs.length > 5) {
+    if (suburbs.length > 10) {
         throw { error: "Maximum 5 suburbs allowed", status: 400 };
     }
 }
