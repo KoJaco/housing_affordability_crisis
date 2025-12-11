@@ -308,7 +308,7 @@ export function ComparisonView({ suburbs, data }: ComparisonViewProps) {
                             <TableBody>
                                 {comparisonRows.map((row) => (
                                     <TableRow key={row.label}>
-                                        <TableCell className="sticky left-0 bg-white font-medium z-10 min-w-[150px]">
+                                        <TableCell className="sticky left-0 bg-white font-medium z-10 max-w-[150px] md:max-w-none md:min-w-[150px] whitespace-normal flex-wrap">
                                             {row.label}
                                         </TableCell>
                                         {suburbs.map((suburb) => (
